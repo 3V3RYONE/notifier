@@ -1,5 +1,7 @@
 import imaplib
 import email
+from components.notificationTemplate import Template
+from components.notifyWhatsApp import NotifyWhatsApp
 
 class AccessEmail():
     def __init__(self, username, password,
@@ -18,12 +20,10 @@ class AccessEmail():
 
     def readUnseen(self, specified_senders):
         self.mail.select('Inbox')
-        #import pdb;pdb.set_trace()
         (status, response) = self.mail.search(None, 'UnSeen')
         mail_ids = response[0].split()
-        mail_ids = mail_ids[-50:]
-
-        subjects = []
+        mail_ids = mail_ids[::-1]
+        mail_ids = mail_ids[0:15]
 
         for itr in mail_ids:
             status, data = self.mail.fetch(itr, '(RFC822)')
@@ -31,9 +31,20 @@ class AccessEmail():
                 if type(refined_response) is tuple:
                     plaintxt_msg = email.message_from_bytes((refined_response[1]))
                     if plaintxt_msg['from'] in specified_senders:
-                        # Fire whatsapp notification
-                        subjects.append(plaintxt_msg['subject'])
-                        print(plaintxt_msg['subject'])
+                        self.sendWhatsappMessage(plaintxt_msg)
                         typ, data = self.mail.store(itr, '+FLAGS', '\\Seen')
-        return subjects
+
+    def sendWhatsappMessage(self, mail):
+        body = None
+        for part in mail.walk():
+            if part.get_content_type() == 'text/plain':
+                body = part.get_payload()
+        template = Template(mail['from'], mail['subject'], body)
+        msg = template.getEmailMessage()
+        notification = NotifyWhatsApp(msg)
+        notification.accessCreds()
+        try:
+            notification.sendMessage()
+        except Exception as e:
+            print('There was a problem while sending the notification to whatsapp: ', e)
 
